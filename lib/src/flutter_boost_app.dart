@@ -1,10 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-import 'package:flutter/scheduler.dart';
 
 import 'boost_channel.dart';
 import 'boost_container.dart';
@@ -23,6 +20,7 @@ typedef FlutterBoostAppBuilder = Widget Function(Widget home);
 class FlutterBoostApp extends StatefulWidget {
   FlutterBoostApp(
     FlutterBoostRouteFactory routeFactory, {
+    Key key,
     FlutterBoostAppBuilder appBuilder,
     String initialRoute,
 
@@ -30,7 +28,8 @@ class FlutterBoostApp extends StatefulWidget {
     List<BoostInterceptor> interceptors,
   })  : appBuilder = appBuilder ?? _defaultAppBuilder,
         interceptors = interceptors ?? <BoostInterceptor>[],
-        initialRoute = initialRoute ?? '/' {
+        initialRoute = initialRoute ?? '/',
+        super(key: key) {
     BoostNavigator.instance.routeFactory = routeFactory;
   }
 
@@ -229,6 +228,59 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
         '_restoreStackForHotRestart, ${stack?.containers}, ${stack?.routes}');
   }
 
+  Future<T> pushWithInterceptor<T extends Object>(
+      String name, bool isFromHost, bool isFlutterPage,
+      {Map<String, dynamic> arguments,
+      String uniqueId,
+      bool withContainer,
+      bool opaque = true}) {
+    Logger.log('pushWithInterceptor, uniqueId=$uniqueId, name=$name');
+    var pushOption = BoostInterceptorOption(name,
+        uniqueId: uniqueId,
+        isFromHost: isFromHost,
+        arguments: arguments ?? <String, dynamic>{});
+    var state = InterceptorState<BoostInterceptorOption>(pushOption);
+    for (var interceptor in interceptors) {
+      final pushHandler = PushInterceptorHandler();
+      interceptor.onPrePush(state.data, pushHandler);
+      state = pushHandler.state;
+      if (state.type != InterceptorResultType.next) {
+        Logger.log('The page was intercepted by user. name:$name, '
+            'isFromHost=$isFromHost, isFlutterPage=$isFlutterPage');
+        return Future<T>.value(state.data as T);
+      }
+    }
+
+    if (state.data is BoostInterceptorOption) {
+      assert(state.type == InterceptorResultType.next);
+      pushOption = state.data;
+      if (isFromHost) {
+        pushContainer(name,
+            uniqueId: pushOption.uniqueId,
+            isFromHost: isFromHost,
+            arguments: pushOption.arguments);
+      } else {
+        if (isFlutterPage) {
+          return pushWithResult(pushOption.name,
+              uniqueId: pushOption.uniqueId,
+              arguments: pushOption.arguments,
+              withContainer: withContainer,
+              opaque: opaque);
+        } else {
+          final params = CommonParams()
+            ..pageName = pushOption.name
+            ..arguments = pushOption.arguments;
+          nativeRouterApi.pushNativeRoute(params);
+          return pendNativeResult(pushOption.name);
+        }
+      }
+    } else {
+      Logger.log(
+          'Oops, Unrecognized parameter type: ${state.data.runtimeType}');
+    }
+    return Future<void>.value();
+  }
+
   Future<T> pushWithResult<T extends Object>(String pageName,
       {String uniqueId,
       Map<String, dynamic> arguments,
@@ -260,11 +312,15 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
         arguments: arguments,
         withContainer: false);
     assert(topContainer != null);
-    return topContainer.addPage(BoostPage.create(pageInfo));
+    var result = topContainer.addPage(BoostPage.create(pageInfo));
+    _pushFinish(pageName, uniqueId: uniqueId, arguments: arguments);
+    return result;
   }
 
   void pushContainer(String pageName,
-      {String uniqueId, Map<String, dynamic> arguments}) {
+      {String uniqueId,
+      bool isFromHost = false,
+      Map<String, dynamic> arguments}) {
     _cancelActivePointers();
     final existed = _findContainerByUniqueId(uniqueId);
     if (existed != null) {
@@ -290,8 +346,30 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
       // Add a new overlay entry with this container
       refreshOnPush(container);
     }
+
+    _pushFinish(pageName,
+        uniqueId: uniqueId, isFromHost: isFromHost, arguments: arguments);
     Logger.log('pushContainer, uniqueId=$uniqueId, existed=$existed,'
         ' arguments:$arguments, $containers');
+  }
+
+  void _pushFinish(String pageName,
+      {String uniqueId,
+      bool isFromHost = false,
+      Map<String, dynamic> arguments}) {
+    var pushOption = BoostInterceptorOption(pageName,
+        uniqueId: uniqueId,
+        isFromHost: isFromHost,
+        arguments: arguments ?? <String, dynamic>{});
+    var state = InterceptorState<BoostInterceptorOption>(pushOption);
+    for (var interceptor in interceptors) {
+      final pushHandler = PushInterceptorHandler();
+      interceptor.onPostPush(state.data, pushHandler);
+      state = pushHandler.state;
+      if (state.type != InterceptorResultType.next) {
+        break;
+      }
+    }
   }
 
   Future<bool> popWithResult<T extends Object>([T result]) async {
@@ -300,7 +378,8 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
     return await pop(result: result);
   }
 
-  Future<bool> removeWithResult([String uniqueId, Map<String, dynamic> result]) async {
+  Future<bool> removeWithResult(
+      [String uniqueId, Map<String, dynamic> result]) async {
     _completePendingResultIfNeeded(uniqueId, result: result);
     return await pop(uniqueId: uniqueId, result: result);
   }
@@ -426,7 +505,8 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
     return true;
   }
 
-  Future<bool> _performBackPressed(BoostContainer container, Object result) async {
+  Future<bool> _performBackPressed(
+      BoostContainer container, Object result) async {
     if (container?.backPressedHandler != null) {
       container.backPressedHandler.call();
       return true;
@@ -523,18 +603,6 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
     Logger.log('onNativeResult, key:$key, result:${params.arguments}');
   }
 
-  void _completePendingNativeResultIfNeeded(String initiatorPage) {
-    _pendingResult.keys
-        .where((element) => element.startsWith('$initiatorPage#'))
-        .toList()
-        .forEach((key) {
-      _pendingResult[key].complete();
-      _pendingResult.remove(key);
-      Logger.log('_completePendingNativeResultIfNeeded, '
-          'key:$key, size:${_pendingResult.length}');
-    });
-  }
-
   void _completePendingResultIfNeeded<T extends Object>(String uniqueId,
       {T result}) {
     if (uniqueId != null && _pendingResult.containsKey(uniqueId)) {
@@ -546,14 +614,6 @@ class FlutterBoostAppState extends State<FlutterBoostApp> {
   void onContainerShow(CommonParams params) {
     final container = _findContainerByUniqueId(params.uniqueId);
     BoostLifecycleBinding.instance.containerDidShow(container);
-
-    // Try to complete pending native result when container closed.
-    final topPage = topContainer?.topPage?.pageInfo?.uniqueId;
-    assert(topPage != null);
-    Future<void>.delayed(
-      const Duration(seconds: 1),
-      () => _completePendingNativeResultIfNeeded(topPage),
-    );
   }
 
   void onContainerHide(CommonParams params) {
