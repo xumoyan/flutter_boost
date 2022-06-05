@@ -6,11 +6,13 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.graphics.Color;
 
 import com.idlefish.flutterboost.Assert;
 import com.idlefish.flutterboost.FlutterBoost;
 import com.idlefish.flutterboost.FlutterBoostUtils;
 import com.idlefish.flutterboost.Messages;
+import com.idlefish.flutterboost.StatusBarUtil;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
@@ -35,6 +37,8 @@ import static com.idlefish.flutterboost.containers.FlutterActivityLaunchConfigs.
 import static com.idlefish.flutterboost.containers.FlutterActivityLaunchConfigs.EXTRA_URL;
 import static com.idlefish.flutterboost.containers.FlutterActivityLaunchConfigs.EXTRA_URL_PARAM;
 
+import androidx.annotation.RequiresApi;
+
 public class FlutterBoostActivity extends FlutterActivity implements FlutterViewContainer {
     private static final String TAG = "FlutterBoostActivity";
     private static final boolean DEBUG = false;
@@ -57,6 +61,8 @@ public class FlutterBoostActivity extends FlutterActivity implements FlutterView
         flutterView.detachFromFlutterEngine(); // Avoid failure when attaching to engine in |onResume|.
         FlutterBoost.instance().getPlugin().onContainerCreated(this);
         if (DEBUG) Log.d(TAG, "#onCreate: " + this);
+
+        StatusBarUtil.setStatusBarLightMode(this, Color.parseColor("#f5f6f8"));
     }
 
     // @Override
@@ -123,6 +129,12 @@ public class FlutterBoostActivity extends FlutterActivity implements FlutterView
         Assert.assertNotNull(platformPlugin);
         platformPlugin.updateSystemUiOverlays();
         if (DEBUG) Log.d(TAG, "#onResume: " + this + ", isOpaque=" + isOpaque());
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP) 
+    @Override public void onPostResume() { 
+        super.onPostResume(); 
+        StatusBarUtil.setStatusBarLightMode(this, Color.parseColor("#f5f6f8"));
     }
 
     @Override
