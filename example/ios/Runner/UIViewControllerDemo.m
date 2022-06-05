@@ -8,8 +8,7 @@
 
 #import "UIViewControllerDemo.h"
 #import <Flutter/Flutter.h>
-#import "DemoRouter.h"
-#import <flutter_boost/FlutterBoostPlugin.h>
+#import <flutter_boost/FlutterBoost.h>
 
 
 @interface UIViewControllerDemo ()
@@ -18,36 +17,37 @@
 
 @implementation UIViewControllerDemo
 
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view from its nib.
 }
 
 - (IBAction)pushFlutterPage:(id)sender {
-    [DemoRouter.sharedRouter open:@"first"
-                        urlParams:@{}
-                             exts:@{@"animated":@(YES)}
-                       completion:^(BOOL f){
-
-    }];
+    
+    FlutterBoostRouteOptions* options = [[FlutterBoostRouteOptions alloc]init];
+    options.pageName = @"flutterPage";
+    options.arguments = @{@"animated":@(YES)};
+    options.completion = ^(BOOL completion) {
+        
+    };
+    
+    [[FlutterBoost instance]open:options];
 }
 
-- (IBAction)present:(id)sender {
-    [DemoRouter.sharedRouter open:@"second"
-                        urlParams:@{@"present":@(YES)}
-                             exts:@{@"animated":@(YES)}
-                       completion:^(BOOL f){}];
-//    [self dismissViewControllerAnimated:YES completion:completion];
+- (IBAction)present:(id)sender {    
+    FlutterBoostRouteOptions* options = [[FlutterBoostRouteOptions alloc]init];
+    options.pageName = @"transparentWidget";
+    options.arguments = @{@"present":@(YES)};
+    options.opaque = NO;
+    options.completion = ^(BOOL completion) {
+
+    };
+
+    [[FlutterBoost instance]open:options];
 }
 
-/*
-#pragma mark - Navigation
-
-// In a storyboard-based application, you will often want to do a little preparation before navigation
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    // Get the new view controller using [segue destinationViewController].
-    // Pass the selected object to the new view controller.
+- (void)viewWillAppear:(BOOL)animated{
+    [super viewWillAppear:animated];
 }
-*/
-
 @end

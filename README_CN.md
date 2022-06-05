@@ -5,7 +5,17 @@
 
 # Release Note
 
- 请查看最新版本0.1.50的release note 确认变更，[0.1.50 release note](https://github.com/alibaba/flutter_boost/releases)。
+v3.0-release.2
+
+PS：空安全版本(null-safety)请看这里 https://github.com/alibaba/flutter_boost/tree/null-safety
+
+
+- 1.flutter sdk升级不需要升级boost
+- 2.简化架构
+- 3.简化接口
+- 4.双端接口设计统一
+- 5.解决了top issue
+- 6.android不需要区分androidx 和support
 
 # FlutterBoost
 
@@ -13,255 +23,43 @@
 
 
 # 前置条件
-在继续之前，您需要将Flutter集成到你现有的项目中。flutter sdk 的版本需要 v1.5.4-hotfixes，否则会编译失败.
 
-# 安装
+1.在继续之前，您需要将Flutter集成到你现有的项目中。
+2.boost3.0版本支持的flutter sdk 版本为 >= 1.22
 
-## 在Flutter项目中添加依赖项。
+## 将FlutterBoost添加到你的Flutter工程依赖中
 
-打开pubspec.yaml并将以下行添加到依赖项：
+打开你的工程的pubspec.yaml ，增加以下依赖
 
 ```json
-flutter_boost: ^0.1.52
-```
-
-或者可以直接依赖github的项目的版本，Tag，pub发布会有延迟，推荐直接依赖Github项目
-
-```java
-
 flutter_boost:
-        git:
-            url: 'https://github.com/alibaba/flutter_boost.git'
-            ref: '0.1.52'
-            
-```
-## Dart代码的集成
-将init代码添加到App App
-
-```dart
-void main() => runApp(MyApp());
-
-class MyApp extends StatefulWidget {
-  @override
-  _MyAppState createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  @override
-  void initState() {
-    super.initState();
-
-    ///register page widget builders,the key is pageName
-    FlutterBoost.singleton.registerPageBuilders({
-      'sample://firstPage': (pageName, params, _) => FirstRouteWidget(),
-      'sample://secondPage': (pageName, params, _) => SecondRouteWidget(),
-    });
-
-  }
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-      title: 'Flutter Boost example',
-      builder: FlutterBoost.init(), ///init container manager
-      home: Container());
-}
+    git:
+        url: 'https://github.com/alibaba/flutter_boost.git'
+        ref: 'v3.0-release.2'
 ```
 
-## iOS代码集成。
+# 使用文档
 
-注意：需要将libc++ 加入 "Linked Frameworks and Libraries" 中。
+- [集成详细步骤](https://github.com/alibaba/flutter_boost/blob/master/docs/install.md)
+- [基本的路由API](https://github.com/alibaba/flutter_boost/blob/master/docs/routeAPI.md)
+- [页面生命周期监测相关API](https://github.com/alibaba/flutter_boost/blob/master/docs/lifecycle.md)
+- [自定义发送跨端事件API](https://github.com/alibaba/flutter_boost/blob/master/docs/event.md)
 
-使用FLBFlutterAppDelegate作为AppDelegate的超类
-
-```objectivec
-@interface AppDelegate : FLBFlutterAppDelegate <UIApplicationDelegate>
-@end
-```
-
-
-为您的应用程序实现FLBPlatform协议方法。
-
-```objectivec
-@interface DemoRouter : NSObject<FLBPlatform>
-
-@property (nonatomic,strong) UINavigationController *navigationController;
-
-+ (DemoRouter *)sharedRouter;
-
-@end
+# 建设文档
+- [如何向我们提issue](https://github.com/alibaba/flutter_boost/blob/master/docs/issue.md)
+- [如何向我们提PR](https://github.com/alibaba/flutter_boost/blob/master/docs/pr.md)
 
 
-@implementation DemoRouter
+# FAQ
 
-- (void)openPage:(NSString *)name
-          params:(NSDictionary *)params
-        animated:(BOOL)animated
-      completion:(void (^)(BOOL))completion
-{
-    if([params[@"present"] boolValue]){
-        FLBFlutterViewContainer *vc = FLBFlutterViewContainer.new;
-        [vc setName:name params:params];
-        [self.navigationController presentViewController:vc animated:animated completion:^{}];
-    }else{
-        FLBFlutterViewContainer *vc = FLBFlutterViewContainer.new;
-        [vc setName:name params:params];
-        [self.navigationController pushViewController:vc animated:animated];
-    }
-}
+请阅读这篇文章:
+<a href="Frequently Asked Question.md">FAQ</a>
 
-
-- (void)closePage:(NSString *)uid animated:(BOOL)animated params:(NSDictionary *)params completion:(void (^)(BOOL))completion
-{
-    FLBFlutterViewContainer *vc = (id)self.navigationController.presentedViewController;
-    if([vc isKindOfClass:FLBFlutterViewContainer.class] && [vc.uniqueIDString isEqual: uid]){
-        [vc dismissViewControllerAnimated:animated completion:^{}];
-    }else{
-        [self.navigationController popViewControllerAnimated:animated];
-    }
-}
-
-@end
-```
-
-
-
-在应用程序开头使用FLBPlatform初始化FlutterBoost。
-
-```的ObjectiveC
- [FlutterBoostPlugin.sharedInstance startFlutterWithPlatform：router
-                                                        onStart：^（id engine）{
-                                                            
-                                                        }];
-```
-
-## Android代码集成。
-
-在Application.onCreate（）中初始化FlutterBoost
-
-```java
-public class MyApplication extends FlutterApplication {
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        FlutterBoostPlugin.init(new IPlatform() {
-            @Override
-            public Application getApplication() {
-                return MyApplication.this;
-            }
-
-            @Override
-            public boolean isDebug() {
-                return true;
-            }
-
-            @Override
-            public void openContainer(Context context, String url, Map<String, Object> urlParams, int requestCode, Map<String, Object> exts) {
-                PageRouter.openPageByUrl(context,url,urlParams,requestCode);
-            }
-
-            @Override
-            public IFlutterEngineProvider engineProvider() {
-                return new BoostEngineProvider(){
-                    @Override
-                    public BoostFlutterEngine createEngine(Context context) {
-                        return new BoostFlutterEngine(context, new DartExecutor.DartEntrypoint(
-                                context.getResources().getAssets(),
-                                FlutterMain.findAppBundlePath(context),
-                                "main"),"/");
-                    }
-                };
-            }
-
-            @Override
-            public int whenEngineStart() {
-                return ANY_ACTIVITY_CREATED;
-            }
-        });
-    }
-```
-
-# 基本用法
-## 概念
-
-所有页面路由请求都将发送到Native路由器。Native路由器与Native Container Manager通信，Native Container Manager负责构建和销毁Native Containers。
-
-## 使用Flutter Boost Native Container用Native代码打开Flutter页面。
-
-```objc
- FLBFlutterViewContainer *vc = FLBFlutterViewContainer.new;
-        [vc setName:name params:params];
-        [self.navigationController presentViewController:vc animated:animated completion:^{}];
-```
-
-Android
-
-```java
-public class FlutterPageActivity extends BoostFlutterActivity {
-
-
-    @Override
-    public String getContainerUrl() {
-        //specify the page name register in FlutterBoost
-        return "sample://firstPage";
-    }
-
-    @Override
-    public Map getContainerUrlParams() {
-        //params of the page
-        Map<String,String> params = new HashMap<>();
-        params.put("key","value");
-        return params;
-    }
-}
-```
-
-或者用Fragment
-
-```java
-public class FlutterFragment extends BoostFlutterFragment {
-
-    @Override
-    public String getContainerUrl() {
-        return "sample://firstPage";
-    }
-
-    @Override
-    public Map getContainerUrlParams() {
-        Map<String,String> params = new HashMap<>();
-        params.put("key","value");
-        return params;
-    }
-}
-```
-
-
-## 使用Flutter Boost在dart代码打开页面。
-Dart
-
-```java
-
- FlutterBoost.singleton
-                .open("sample://flutterFragmentPage")
-
-```
-
-
-## 使用Flutter Boost在dart代码关闭页面。
-
-```java
- FlutterBoost.singleton.close(uniqueId);
-```
-
-# Examples
-更详细的使用例子请参考Demo
 
 # 许可证
 该项目根据MIT许可证授权 - 有关详细信息，请参阅[LICENSE.md]（LICENSE.md）文件
 <a name="Acknowledgments"> </a>
 
-# 问题反馈群（钉钉群)
-
-<img width="200" src="https://img.alicdn.com/tfs/TB1JSzVeYY1gK0jSZTEXXXDQVXa-892-1213.jpg">
 
 
 ## 关于我们
